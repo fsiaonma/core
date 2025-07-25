@@ -38,17 +38,31 @@ function isUserCodeNode(node: any): boolean {
   return !internalPatterns.some(pattern => nodeName.includes(pattern))
 }
 
-// 辅助函数：格式化标志位
-function formatFlags(flags: number): string {
+// 辅助函数：格式化标志位(简单)
+export function formatFlagsSimple(flags: number): string {
   const names: string[] = []
-  if (flags & ReactiveFlags.Mutable) names.push('Mutable:可变的')
-  if (flags & ReactiveFlags.Watching) names.push('Watching:监听中')
+  if (flags & ReactiveFlags.Mutable) names.push(`Mutable`)
+  if (flags & ReactiveFlags.Watching) names.push(`Watching`)
   if (flags & ReactiveFlags.RecursedCheck) {
-    names.push('RecursedCheck:递归检查中')
+    names.push(`RecursedCheck`)
   }
-  if (flags & ReactiveFlags.Recursed) names.push('Recursed:已递归处理')
-  if (flags & ReactiveFlags.Dirty) names.push('Dirty:脏数据')
-  if (flags & ReactiveFlags.Pending) names.push('Pending:等待处理')
+  if (flags & ReactiveFlags.Recursed) names.push(`Recursed`)
+  if (flags & ReactiveFlags.Dirty) names.push(`Dirty`)
+  if (flags & ReactiveFlags.Pending) names.push(`Pending`)
+  return `(${names.join('|') || 'None'})`
+}
+
+// 辅助函数：格式化标志位
+export function formatFlags(flags: number): string {
+  const names: string[] = []
+  if (flags & ReactiveFlags.Mutable) names.push(`Mutable(可变的)`)
+  if (flags & ReactiveFlags.Watching) names.push(`Watching(监听中)`)
+  if (flags & ReactiveFlags.RecursedCheck) {
+    names.push(`RecursedCheck(递归检查中)`)
+  }
+  if (flags & ReactiveFlags.Recursed) names.push(`Recursed(已递归处理)`)
+  if (flags & ReactiveFlags.Dirty) names.push(`Dirty(脏数据)`)
+  if (flags & ReactiveFlags.Pending) names.push(`Pending(等待处理)`)
   return names.join('|') || 'None'
 }
 
@@ -72,16 +86,16 @@ function printNodeStatus(node: any) {
     return
   }
 
-  const nodeName = getNodeName(node)
+  const nodeName = `${getNodeName(node)}${formatFlagsSimple(node.flags)}`
 
-  // console.log(node)
+  // console.info(node)
 
   if (node.deps) {
     let result = ''
     let current = node.deps
     while (current) {
-      const depName = getNodeName(current.dep)
-      const subName = getNodeName(current.sub)
+      const depName = `${getNodeName(current.dep)}${formatFlagsSimple(current.dep.flags)}`
+      const subName = `${getNodeName(current.sub)}${formatFlagsSimple(current.sub.flags)}`
       const nextPointer = current.nextDep
       if (isUserCodeNode(depName) && isUserCodeNode(subName)) {
         result = `${result} \x1b[32mLink\x1b[0m{dep:${depName},sub:${subName}}${nextPointer ? '\x1b[31m --nextDep-->\x1b[0m' : ''}`
@@ -89,8 +103,8 @@ function printNodeStatus(node: any) {
       current = nextPointer
     }
     if (result) {
-      console.log(
-        `📋 \x1b[31mSignal(${nodeName})\x1b[0m{_value:${node._value}}\x1b[31m --deps-->\x1b[0m${result}`,
+      console.info(
+        `📋 \x1b[31mSignal(${nodeName})\x1b[0m{_value:${(node as any)._value ?? 'N/A'}}\x1b[31m --deps-->\x1b[0m${result}`,
       )
     }
   }
@@ -99,8 +113,8 @@ function printNodeStatus(node: any) {
     let result = ''
     let current = node.subs
     while (current) {
-      const depName = getNodeName(current.dep)
-      const subName = getNodeName(current.sub)
+      const depName = `${getNodeName(current.dep)}${formatFlagsSimple(current.dep.flags)}`
+      const subName = `${getNodeName(current.sub)}${formatFlagsSimple(current.sub.flags)}`
       const nextPointer = current.nextSub
       if (isUserCodeNode(current.dep) && isUserCodeNode(current.sub)) {
         result = `${result} \x1b[32mLink\x1b[0m{dep:${depName},sub:${subName}}${nextPointer ? ' \x1b[34m --nextSub-->\x1b[0m' : ''}`
@@ -108,8 +122,8 @@ function printNodeStatus(node: any) {
       current = nextPointer
     }
     if (result) {
-      console.log(
-        `📋 \x1b[34mSignal(${nodeName})\x1b[0m{_value:${node._value}}\x1b[34m --subs-->\x1b[0m${result}`,
+      console.info(
+        `📋 \x1b[34mSignal(${nodeName})\x1b[0m{_value:${(node as any)._value ?? 'N/A'}}\x1b[34m --subs-->\x1b[0m${result}`,
       )
     }
   }
@@ -162,13 +176,13 @@ interface Stack<T> {
  * 使用位运算进行快速状态检查和更新
  */
 export const enum ReactiveFlags {
-  None = 0,
-  Mutable = 1 << 0, // 1: 可变的（computed、ref）
-  Watching = 1 << 1, // 2: 监听中（effect）
-  RecursedCheck = 1 << 2, // 4: 递归检查中，用于依赖追踪
-  Recursed = 1 << 3, // 8: 已递归处理，防止重复处理
-  Dirty = 1 << 4, // 16: 脏数据，需要重新计算
-  Pending = 1 << 5, // 32: 等待处理，已标记但未执行
+  None = 0, // 000000
+  Mutable = 1 << 0, // 000001 1: 可变的（computed、ref）
+  Watching = 1 << 1, // 000010 2: 监听中（effect）
+  RecursedCheck = 1 << 2, // 000100 4: 递归检查中，用于依赖追踪
+  Recursed = 1 << 3, // 001000 8: 已递归处理，防止重复处理
+  Dirty = 1 << 4, // 010000 16: 脏数据，需要重新计算
+  Pending = 1 << 5, // 100000 32: 等待处理，已标记但未执行
 }
 
 // 通知缓冲区：收集需要执行的 effect，批量处理提升性能
@@ -232,7 +246,7 @@ export function endBatch(): void {
 export function link(dep: ReactiveNode, sub: ReactiveNode): void {
   // 只在涉及用户代码时显示链接信息
   if (isUserCodeNode(dep) && isUserCodeNode(sub)) {
-    console.log(
+    console.info(
       `\n🔗 [LINK] 建立依赖关系: ${getNodeName(dep)} 被 ${getNodeName(sub)} 订阅`,
     )
   }
@@ -241,7 +255,7 @@ export function link(dep: ReactiveNode, sub: ReactiveNode): void {
   const prevDep = sub.depsTail
   if (prevDep !== undefined && prevDep.dep === dep) {
     if (isUserCodeNode(dep) || isUserCodeNode(sub)) {
-      console.log(`  ❌ 已存在相同依赖，跳过`)
+      console.info(`  ❌ 已存在相同依赖，跳过`)
     }
     return // 已存在，直接返回
   }
@@ -255,7 +269,7 @@ export function link(dep: ReactiveNode, sub: ReactiveNode): void {
     if (nextDep !== undefined && nextDep.dep === dep) {
       sub.depsTail = nextDep
       if (isUserCodeNode(dep) || isUserCodeNode(sub)) {
-        console.log(`  ✅ 在递归检查中找到现有链接，复用`)
+        console.info(`  ✅ 在递归检查中找到现有链接，复用`)
       }
       return
     }
@@ -269,7 +283,7 @@ export function link(dep: ReactiveNode, sub: ReactiveNode): void {
     (!recursedCheck || isValidLink(prevSub, sub))
   ) {
     if (isUserCodeNode(dep) || isUserCodeNode(sub)) {
-      console.log(`  ✅ 找到有效的现有订阅，跳过`)
+      console.info(`  ✅ 找到有效的现有订阅，跳过`)
     }
     return
   }
@@ -306,7 +320,7 @@ export function link(dep: ReactiveNode, sub: ReactiveNode): void {
   }
 
   if (isUserCodeNode(dep) && isUserCodeNode(sub)) {
-    // console.log(`  ✅ 新链接创建成功!`)
+    console.info(`  ✅ 新链接创建成功!`)
     debugPrintLinkStructure(
       [dep, sub],
       `链接建立后结构: ${getNodeName(dep)} -> ${getNodeName(sub)}`,
@@ -378,7 +392,7 @@ export function unlink(
  * @param link 开始传播的链接
  */
 export function propagate(link: Link): void {
-  console.log(`\n📡 [PROPAGATE] 开始传播`)
+  console.info(`📡 [PROPAGATE] ${getNodeName(link.dep)} 改变，开始传播`)
 
   let next = link.nextSub
   let stack: Stack<Link | undefined> | undefined
@@ -388,13 +402,16 @@ export function propagate(link: Link): void {
     const sub = link.sub
     let flags = sub.flags
 
-    console.log(
-      `  🎯 处理节点 [深度${depth}]: ${getNodeName(sub)} (${formatFlags(flags)})`,
-    )
+    let indentation = ''
+    for (let i = 0; i < depth; ++i) {
+      indentation += '    '
+    }
+
+    console.info(`${indentation}🎯 处理节点 ${getNodeName(sub)}`)
 
     // 只处理 Mutable（computed/ref）或 Watching（effect）的节点
     if (flags & (ReactiveFlags.Mutable | ReactiveFlags.Watching)) {
-      let action = 'unknown'
+      let action = formatFlags(flags)
 
       // 状态转换逻辑：根据当前状态决定如何处理
       if (
@@ -408,17 +425,17 @@ export function propagate(link: Link): void {
       ) {
         // 情况1：干净状态，直接标记为 Pending
         sub.flags = flags | ReactiveFlags.Pending
-        action = '干净状态 -> Pending'
+        action += ' -> Pending'
       } else if (
         !(flags & (ReactiveFlags.RecursedCheck | ReactiveFlags.Recursed))
       ) {
         // 情况2：不在递归检查中，跳过处理
         flags = ReactiveFlags.None
-        action = '不在递归检查 -> 跳过'
+        action += ' -> 跳过'
       } else if (!(flags & ReactiveFlags.RecursedCheck)) {
         // 情况3：清除递归标志，设置为 Pending
         sub.flags = (flags & ~ReactiveFlags.Recursed) | ReactiveFlags.Pending
-        action = '清除递归标志 -> Pending'
+        action += ' -> Pending'
       } else if (
         !(flags & (ReactiveFlags.Dirty | ReactiveFlags.Pending)) &&
         isValidLink(link, sub)
@@ -426,34 +443,37 @@ export function propagate(link: Link): void {
         // 情况4：在递归检查中且链接有效，标记为已递归和 Pending
         sub.flags = flags | ReactiveFlags.Recursed | ReactiveFlags.Pending
         flags &= ReactiveFlags.Mutable
-        action = '递归检查有效 -> Recursed+Pending'
+        action += ' -> Recursed+Pending'
       } else {
         // 情况5：其他情况，跳过处理
         flags = ReactiveFlags.None
-        action = '其他情况 -> 跳过'
+        action += ' -> 跳过'
       }
 
-      console.log(`    📝 状态转换: ${action}`)
+      console.info(`    ${indentation}📝 状态转换: ${action}`)
 
       // 如果是 effect（Watching），添加到通知缓冲区
       if (flags & ReactiveFlags.Watching) {
         notifyBuffer[notifyBufferLength++] = sub as Effect
-        console.log(
-          `    📢 添加到通知缓冲区 (buffer长度: ${notifyBufferLength})`,
+        console.info(
+          `    ${indentation}📢 添加到通知缓冲区(长度:${notifyBufferLength})`,
         )
+        console.info(`    `, notifyBuffer)
       }
 
       // 如果是 computed（Mutable）且有订阅者，继续传播
       if (flags & ReactiveFlags.Mutable) {
         const subSubs = sub.subs
         if (subSubs !== undefined) {
-          console.log(`    🔄 继续传播到 ${getNodeName(sub)} 的订阅者`)
+          console.info(
+            `    ${indentation}🔄 继续传播到 ${getNodeName(sub)} 的订阅者`,
+          )
           link = subSubs
           if (subSubs.nextSub !== undefined) {
             // 有多个订阅者，使用栈保存当前状态
             stack = { value: next, prev: stack }
             next = link.nextSub
-            console.log(`    📚 保存状态到栈 (多个订阅者)`)
+            console.info(`    ${indentation}📚 保存状态到栈 (多个订阅者)`)
           }
           depth++
           continue // 继续处理子订阅者
@@ -464,7 +484,9 @@ export function propagate(link: Link): void {
     // 处理当前层级的下一个订阅者
     if ((link = next!) !== undefined) {
       next = link.nextSub
-      console.log(`    ➡️ 处理下一个订阅者: ${getNodeName(link.sub)}`)
+      console.info(
+        `    ${indentation}➡️ 处理下一个订阅者: ${getNodeName(link.sub)}`,
+      )
       continue
     }
 
@@ -475,8 +497,8 @@ export function propagate(link: Link): void {
       depth--
       if (link !== undefined) {
         next = link.nextSub
-        console.log(
-          `    ↩️ 从栈恢复状态 [深度${depth}]: ${getNodeName(link.sub)}`,
+        console.info(
+          `    ${indentation}↩️ 从栈恢复状态 [深度${depth}]: ${getNodeName(link.sub)}`,
         )
         continue top
       }
@@ -485,7 +507,7 @@ export function propagate(link: Link): void {
     break
   } while (true)
 
-  console.log(`  ✅ 传播完成`)
+  console.info(`✅ 传播完成`)
 }
 
 /**
@@ -537,8 +559,8 @@ export function endTracking(
  * 批处理机制的核心：统一执行所有待处理的 effect
  */
 export function flush(): void {
-  console.log(
-    `\n📦 [FLUSH] 开始执行通知缓冲区 (${notifyBufferLength} 个 effect)`,
+  console.info(
+    `📦 [FLUSH] 开始执行通知缓冲区 (${notifyBufferLength} 个 effect)`,
   )
 
   let executedCount = 0
@@ -546,7 +568,7 @@ export function flush(): void {
     const effect = notifyBuffer[notifyIndex]!
     notifyBuffer[notifyIndex++] = undefined
 
-    console.log(
+    console.info(
       `  🚀 执行 effect [${executedCount + 1}/${notifyBufferLength}]: ${getNodeName(effect)}`,
     )
 
@@ -557,15 +579,7 @@ export function flush(): void {
   notifyIndex = 0
   notifyBufferLength = 0
 
-  console.log(`  ✅ 所有 effect 执行完成 (共 ${executedCount} 个)`)
-
-  // 打印当前缓冲区中已执行的effect的链表结构
-  if (notifyIndex > 0) {
-    const executedEffects = notifyBuffer.slice(0, notifyIndex).filter(Boolean)
-    if (executedEffects.length > 0) {
-      debugPrintLinkStructure(executedEffects, `批处理执行后结构`)
-    }
-  }
+  console.info(`✅ 所有 effect 执行完成 (共 ${executedCount} 个)`)
 }
 
 /**
@@ -589,6 +603,12 @@ export function checkDirty(link: Link, sub: ReactiveNode): boolean {
     const dep = link.dep
     const depFlags = dep.flags
 
+    let blanks = () => new Array(checkDepth + 1).fill('    ').join('')
+
+    console.info(
+      `${blanks()}[\x1b[34mcheckDirty\x1b[0m] 节点名称: ${getNodeName(dep)}-${(dep as any)._value ?? 'N/A'} | 节点状态: ${formatFlags(depFlags)}`,
+    )
+
     let dirty = false
 
     // 检查订阅者本身是否为脏数据
@@ -599,6 +619,9 @@ export function checkDirty(link: Link, sub: ReactiveNode): boolean {
       (depFlags & (ReactiveFlags.Mutable | ReactiveFlags.Dirty)) ===
       (ReactiveFlags.Mutable | ReactiveFlags.Dirty)
     ) {
+      console.info(
+        `${blanks()}[\x1b[34mcheckDirty\x1b[0m] 节点名称: ${getNodeName(dep)}-${(dep as any)._value ?? 'N/A'} 为 dirty 可变节点，执行依赖的更新，dirty 置为 \x1b[31mtrue\x1b[0m`,
+      )
       // 执行依赖的更新
       if ((dep as Computed).update()) {
         const subs = dep.subs!
@@ -612,7 +635,10 @@ export function checkDirty(link: Link, sub: ReactiveNode): boolean {
       (depFlags & (ReactiveFlags.Mutable | ReactiveFlags.Pending)) ===
       (ReactiveFlags.Mutable | ReactiveFlags.Pending)
     ) {
-      // 需要递归检查依赖的依赖
+      console.info(
+        `${blanks()}[\x1b[34mcheckDirty\x1b[0m] 节点名称: ${getNodeName(dep)}-${(dep as any)._value ?? 'N/A'} 为 pending 可变节点，需要检查依赖的依赖`,
+      )
+      // 检查依赖的依赖
       if (link.nextSub !== undefined || link.prevSub !== undefined) {
         stack = { value: link, prev: stack }
       }
@@ -640,7 +666,10 @@ export function checkDirty(link: Link, sub: ReactiveNode): boolean {
         link = firstSub
       }
       if (dirty) {
-        if ((sub as Computed).update()) {
+        console.info(
+          `${blanks()}[\x1b[34mcheckDirty\x1b[0m 递归回溯] 节点名称: ${getNodeName(sub)}-${(sub as any)._value ?? 'N/A'} 执行依赖的更新`,
+        )
+        if ((sub as Computed).update(blanks())) {
           if (hasMultipleSubs) {
             shallowPropagate(firstSub)
           }
@@ -655,8 +684,15 @@ export function checkDirty(link: Link, sub: ReactiveNode): boolean {
         link = link.nextDep
         continue top
       }
+      console.info(
+        `${blanks()}[\x1b[34mcheckDirty\x1b[0m 递归回溯] 节点名称: ${getNodeName(sub)}-${(sub as any)._value ?? 'N/A'} 订阅者无更新，dirty 置为 \x1b[32mfalse\x1b[0m`,
+      )
       dirty = false
     }
+
+    console.info(
+      `${blanks()}[\x1b[34mcheckDirty\x1b[0m] 节点名称: ${getNodeName(sub)}-${(sub as any)._value ?? 'N/A'} dirty: ${dirty ? '\x1b[31mtrue\x1b[0m' : '\x1b[32mfalse\x1b[0m'}`,
+    )
 
     return dirty
   } while (true)
@@ -677,6 +713,9 @@ export function shallowPropagate(link: Link): void {
       (subFlags & (ReactiveFlags.Pending | ReactiveFlags.Dirty)) ===
       ReactiveFlags.Pending
     ) {
+      console.info(
+        `${getNodeName(link.dep)} 的订阅者 ${getNodeName(sub)} 状态变 dirty`,
+      )
       sub.flags = subFlags | ReactiveFlags.Dirty
     }
     link = nextSub!

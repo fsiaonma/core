@@ -11,6 +11,7 @@ import {
   activeSub,
   checkDirty,
   endTracking,
+  formatFlags,
   link,
   shallowPropagate,
   startTracking,
@@ -125,6 +126,10 @@ export class ComputedRefImpl<T = any> implements ReactiveNode {
 
   get value(): T {
     const flags = this.flags
+    console.info(
+      `[\x1b[32m访问 computed 值\x1b[0m -- 开始] ${this._value}`,
+      `flag:${formatFlags(flags)}`,
+    )
     if (
       flags & SystemReactiveFlags.Dirty ||
       (flags & SystemReactiveFlags.Pending && checkDirty(this.deps!, this))
@@ -150,6 +155,7 @@ export class ComputedRefImpl<T = any> implements ReactiveNode {
     } else if (activeEffectScope !== undefined) {
       link(this, activeEffectScope)
     }
+    console.info(`[\x1b[32m访问 computed 值\x1b[0m -- 结束] ${this._value}`)
     return this._value!
   }
 
@@ -161,18 +167,29 @@ export class ComputedRefImpl<T = any> implements ReactiveNode {
     }
   }
 
-  update(): boolean {
+  update(blanks: string = '  '): boolean {
     const prevSub = startTracking(this)
+    const oldValue = this._value
+    let newValue
     try {
-      const oldValue = this._value
-      const newValue = this.fn(oldValue)
+      console.info(
+        `${blanks}[\x1b[33m更新 computed 值\x1b[0m -- 开始] ${oldValue} | flags:${formatFlags(this.flags)}`,
+      )
+      newValue = this.fn(oldValue)
       if (hasChanged(oldValue, newValue)) {
+        console.info(
+          `${blanks}[\x1b[33m更新 computed 值\x1b[0m] ${oldValue} -> ${newValue}`,
+        )
         this._value = newValue
         return true
       }
+      console.info(`${blanks}[\x1b[33m更新 computed 值\x1b[0m] 无需更新`)
       return false
     } finally {
       endTracking(this, prevSub)
+      console.info(
+        `${blanks}[\x1b[33m更新 computed 值\x1b[0m -- 结束] ${oldValue} -> ${newValue} | flags:${formatFlags(this.flags)}`,
+      )
     }
   }
 }
@@ -192,7 +209,7 @@ if (__DEV__) {
  * const count = ref(1)
  * const plusOne = computed(() => count.value + 1)
  *
- * console.log(plusOne.value) // 2
+ * console.info(plusOne.value) // 2
  * plusOne.value++ // error
  * ```
  *
@@ -207,7 +224,7 @@ if (__DEV__) {
  * })
  *
  * plusOne.value = 1
- * console.log(count.value) // 0
+ * console.info(count.value) // 0
  * ```
  *
  * @param getter - Function that produces the next value.
