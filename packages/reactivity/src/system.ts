@@ -8,11 +8,15 @@ import { warn } from './warning.js'
 
 // 辅助函数：获取节点名称
 function getNodeName(node: any): string {
-  if (node.constructor?.name === 'SetupRenderEffect') {
+  if (!node) return 'null'
+  if (
+    ['SetupRenderEffect', 'RenderWatcherEffect'].includes(
+      node.constructor?.name,
+    )
+  ) {
     // 特殊处理最终展示依赖
     return node.constructor.name
   }
-  if (!node) return 'null'
   if (node.name) return node.name
   if (node.fn?.name) return node.fn.name
   if (node.constructor?.name) return node.constructor.name
@@ -31,7 +35,6 @@ function isUserCodeNode(node: any): boolean {
     'renderComponentRoot',
     'instance',
     'ReactiveEffect',
-    'RenderWatcherEffect',
     'Dep',
     'bound containerVisible',
   ]
@@ -49,6 +52,7 @@ export function formatFlagsSimple(flags: number): string {
   if (flags & ReactiveFlags.Recursed) names.push(`Recursed`)
   if (flags & ReactiveFlags.Dirty) names.push(`Dirty`)
   if (flags & ReactiveFlags.Pending) names.push(`Pending`)
+  // return ''
   return `(${names.join('|') || 'None'})`
 }
 
@@ -64,6 +68,11 @@ export function formatFlags(flags: number): string {
   if (flags & ReactiveFlags.Dirty) names.push(`Dirty(脏数据)`)
   if (flags & ReactiveFlags.Pending) names.push(`Pending(等待处理)`)
   return names.join('|') || 'None'
+}
+
+let trackingDepth = -1
+const trackingBlanks = () => {
+  return new Array(trackingDepth).fill('    ').join('')
 }
 
 // 内部调试函数：打印链表结构
@@ -93,6 +102,7 @@ function printNodeStatus(node: any) {
   if (node.deps) {
     let result = ''
     let current = node.deps
+    let _current = current
     while (current) {
       const depName = `${getNodeName(current.dep)}${formatFlagsSimple(current.dep.flags)}`
       const subName = `${getNodeName(current.sub)}${formatFlagsSimple(current.sub.flags)}`
@@ -100,11 +110,13 @@ function printNodeStatus(node: any) {
       if (isUserCodeNode(depName) && isUserCodeNode(subName)) {
         result = `${result} \x1b[32mLink\x1b[0m{dep:${depName},sub:${subName}}${nextPointer ? '\x1b[31m --nextDep-->\x1b[0m' : ''}`
       }
+      _current = current
       current = nextPointer
     }
+    result = `${result}\x1b[31m --dep--> \x1b[0m\x1b[34mSignal(${getNodeName(_current.dep)})\x1b[0m`
     if (result) {
       console.info(
-        `📋 \x1b[31mSignal(${nodeName})\x1b[0m{_value:${(node as any)._value ?? 'N/A'}}\x1b[31m --deps-->\x1b[0m${result}`,
+        `${trackingBlanks()}📋 \x1b[31mSignal(${nodeName})\x1b[0m{_value:${(node as any)._value ?? 'N/A'}}\x1b[31m --deps-->\x1b[0m${result}`,
       )
     }
   }
@@ -112,18 +124,21 @@ function printNodeStatus(node: any) {
   if (node.subs) {
     let result = ''
     let current = node.subs
+    let _current = current
     while (current) {
       const depName = `${getNodeName(current.dep)}${formatFlagsSimple(current.dep.flags)}`
       const subName = `${getNodeName(current.sub)}${formatFlagsSimple(current.sub.flags)}`
       const nextPointer = current.nextSub
       if (isUserCodeNode(current.dep) && isUserCodeNode(current.sub)) {
-        result = `${result} \x1b[32mLink\x1b[0m{dep:${depName},sub:${subName}}${nextPointer ? ' \x1b[34m --nextSub-->\x1b[0m' : ''}`
+        result = `${result} \x1b[32mLink\x1b[0m{dep:${depName},sub:${subName}}${nextPointer ? '\x1b[34m --nextSub-->\x1b[0m' : ''}`
       }
+      _current = current
       current = nextPointer
     }
+    result = `${result}\x1b[34m --sub--> \x1b[0m\x1b[31mSignal(${getNodeName(_current.sub)})\x1b[0m`
     if (result) {
       console.info(
-        `📋 \x1b[34mSignal(${nodeName})\x1b[0m{_value:${(node as any)._value ?? 'N/A'}}\x1b[34m --subs-->\x1b[0m${result}`,
+        `${trackingBlanks()}📋 \x1b[34mSignal(${nodeName})\x1b[0m{_value:${(node as any)._value ?? 'N/A'}}\x1b[34m --subs-->\x1b[0m${result}`,
       )
     }
   }
@@ -247,7 +262,7 @@ export function link(dep: ReactiveNode, sub: ReactiveNode): void {
   // 只在涉及用户代码时显示链接信息
   if (isUserCodeNode(dep) && isUserCodeNode(sub)) {
     console.info(
-      `\n🔗 [LINK] 建立依赖关系: ${getNodeName(dep)} 被 ${getNodeName(sub)} 订阅`,
+      `${trackingBlanks()}[\x1b[91m依赖收集\x1b[0m] 🔗 建立依赖关系: ${getNodeName(dep)} 被 ${getNodeName(sub)} 订阅`,
     )
   }
 
@@ -255,7 +270,7 @@ export function link(dep: ReactiveNode, sub: ReactiveNode): void {
   const prevDep = sub.depsTail
   if (prevDep !== undefined && prevDep.dep === dep) {
     if (isUserCodeNode(dep) || isUserCodeNode(sub)) {
-      console.info(`  ❌ 已存在相同依赖，跳过`)
+      console.info(`${trackingBlanks()}❌ 已存在相同依赖，跳过`)
     }
     return // 已存在，直接返回
   }
@@ -269,7 +284,7 @@ export function link(dep: ReactiveNode, sub: ReactiveNode): void {
     if (nextDep !== undefined && nextDep.dep === dep) {
       sub.depsTail = nextDep
       if (isUserCodeNode(dep) || isUserCodeNode(sub)) {
-        console.info(`  ✅ 在递归检查中找到现有链接，复用`)
+        console.info(`${trackingBlanks()}✅ 在递归检查中找到现有链接，复用`)
       }
       return
     }
@@ -283,7 +298,7 @@ export function link(dep: ReactiveNode, sub: ReactiveNode): void {
     (!recursedCheck || isValidLink(prevSub, sub))
   ) {
     if (isUserCodeNode(dep) || isUserCodeNode(sub)) {
-      console.info(`  ✅ 找到有效的现有订阅，跳过`)
+      console.info(`${trackingBlanks()}✅ 找到有效的现有订阅，跳过`)
     }
     return
   }
@@ -320,11 +335,11 @@ export function link(dep: ReactiveNode, sub: ReactiveNode): void {
   }
 
   if (isUserCodeNode(dep) && isUserCodeNode(sub)) {
-    console.info(`  ✅ 新链接创建成功!`)
     debugPrintLinkStructure(
       [dep, sub],
       `链接建立后结构: ${getNodeName(dep)} -> ${getNodeName(sub)}`,
     )
+    console.info(`${trackingBlanks()}✅ 新链接创建成功!`)
   }
 }
 
@@ -518,12 +533,17 @@ export function propagate(link: Link): void {
  * @returns 之前的活跃订阅者
  */
 export function startTracking(sub: ReactiveNode): ReactiveNode | undefined {
+  trackingDepth++
   sub.depsTail = undefined
   sub.flags =
     (sub.flags &
       ~(ReactiveFlags.Recursed | ReactiveFlags.Dirty | ReactiveFlags.Pending)) |
     ReactiveFlags.RecursedCheck
-  return setActiveSub(sub)
+  const preSub = setActiveSub(sub)
+  console.log(
+    `${trackingBlanks()}[\x1b[91m依赖收集 -- 开始\x1b[0m] ${getNodeName(preSub)} -> ${getNodeName(activeSub)}(\x1b[91mactiveSub\x1b[0m)`,
+  )
+  return preSub
 }
 
 /**
@@ -544,6 +564,9 @@ export function endTracking(
     )
   }
   activeSub = prevSub
+  console.log(
+    `${trackingBlanks()}[\x1b[91m依赖收集 -- 结束\x1b[0m] ${getNodeName(sub)} -> ${getNodeName(prevSub)}(\x1b[91mactiveSub\x1b[0m)`,
+  )
 
   // 清理追踪过程中新增的依赖
   const depsTail = sub.depsTail
@@ -552,6 +575,8 @@ export function endTracking(
     toRemove = unlink(toRemove, sub)
   }
   sub.flags &= ~ReactiveFlags.RecursedCheck
+
+  trackingDepth--
 }
 
 /**
